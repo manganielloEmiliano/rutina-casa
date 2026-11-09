@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https:; frame-src https://www.youtube-nocookie.com; connect-src https://api.github.com https://gist.githubusercontent.com; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>Rutina en Casa</title>
+  <meta name="description" content="Seguimiento de la rutina de 60 minutos en casa: pedaleador, bandas elásticas y colchoneta.">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Rutina en Casa <small>Opción A · 60 min</small></h1>
+      <a href="#cuenta" id="sync-pill" class="sync-pill" data-status="off">Sin conectar</a>
+    </div>
+    <nav class="tabs" aria-label="Secciones">
+      <a href="#hoy" data-view="hoy">Hoy</a>
+      <a href="#ejercicios" data-view="ejercicios">Ejercicios</a>
+      <a href="#historial" data-view="historial">Historial</a>
+      <a href="#cuenta" data-view="cuenta">Cuenta</a>
+    </nav>
+  </header>
+
+  <main id="view" class="container"></main>
+
+  <!-- Temporizador fijo -->
+  <section id="timer" class="timer" hidden aria-live="polite">
+    <div class="timer-bar"><span id="timer-fill"></span></div>
+    <div class="timer-body">
+      <div class="timer-info">
+        <p id="timer-step" class="muted"></p>
+        <p id="timer-label" class="timer-label"></p>
+        <p id="timer-next" class="muted"></p>
+      </div>
+      <p id="timer-clock" class="timer-clock">00:00</p>
+      <div class="timer-actions">
+        <button class="btn" id="timer-toggle">Pausa</button>
+        <button class="btn ghost" id="timer-skip">Saltar</button>
+        <button class="btn ghost" id="timer-stop">Cortar</button>
+      </div>
+    </div>
+  </section>
+
+  <dialog id="info">
+    <div id="info-body"></div>
+    <form method="dialog"><button class="btn block">Cerrar</button></form>
+  </dialog>
+
+  <datalist id="bands">
+    <option value="10 lb"><option value="15 lb"><option value="20 lb"><option value="25 lb">
+    <option value="35 lb"><option value="35 + 20 lb"><option value="35 + 25 lb"><option value="Peso corporal">
+  </datalist>
+
+  <script src="app.js"></script>
+</body>
+</html>
