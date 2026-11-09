@@ -130,7 +130,7 @@ const localDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDa
 
 const K = {
   history: 'rc.history', current: 'rc.current', videos: 'rc.videos', last: 'rc.lastLoad',
-  deleted: 'rc.deleted', meta: 'rc.meta', gh: 'rc.github'
+  deleted: 'rc.deleted', meta: 'rc.meta', gh: 'rc.github', currentAt: 'rc.currentAt'
 };
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -199,7 +199,16 @@ function progress(s) {
   return Math.round(items.filter(Boolean).length / items.length * 100);
 }
 
-function saveCurrent() { store.set(K.current, state.current); }
+/**
+ * Único punto de escritura de la sesión en curso. Marca la fecha del cambio
+ * (también al cerrarla: null + fecha = "se cerró") para que la sincronización
+ * sepa qué dispositivo tiene la versión más nueva.
+ */
+function saveCurrent() {
+  store.set(K.current, state.current);
+  store.set(K.currentAt, new Date().toISOString());
+  scheduleSync();
+}
 
 function setPath(obj, path, value) {
   const keys = path.split('.');
@@ -806,30 +815,63 @@ function mergeData(remote) {
     remoteVal && (rmeta[key] || '') > (meta[key] || '') ? [remoteVal, rmeta[key]] : [localVal, meta[key] || rmeta[key]];
   const [videos, videosAt] = newest('videosAt', state.videos, remote.videos);
   const [lastLoad, lastAt] = newest('lastAt', store.get(K.last, {}), remote.lastLoad);
+  const history = [...byId.values()].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  // Sesión en curso: gana el cambio más reciente (incluido "se cerró" = null).
+  const localAt = store.get(K.currentAt, '') || '';
+  const remoteAt = remote.currentAt || '';
+  let [current, currentAt] = remoteAt > localAt ? [remote.current ?? null, remoteAt] : [state.current, localAt];
+  // Si ya se guardó o borró en algún dispositivo, no debe seguir abierta.
+  if (current && (byId.has(current.id) || del.has(current.id))) current = null;
+
   return {
-    history: [...byId.values()].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))),
+    history,
     deleted,
     videos,
     lastLoad,
+    current,
+    currentAt,
     meta: { videosAt, lastAt }
   };
 }
 
 const fingerprint = d => JSON.stringify([
-  (d.history || []).map(h => h.id).sort(), [...(d.deleted || [])].sort(), d.videos || {}, d.lastLoad || {}
+  (d.history || []).map(h => h.id).sort(), [...(d.deleted || [])].sort(), d.videos || {}, d.lastLoad || {},
+  d.currentAt || '', d.current?.id || null
 ]);
 
+/** Aplica el merge en este dispositivo. Devuelve qué cambió para decidir si re-renderizar. */
 function applyLocal(m) {
   const before = fingerprint({ history: state.history, deleted: state.deleted, videos: state.videos, lastLoad: store.get(K.last, {}) });
+  const currentChanged = JSON.stringify(state.current) !== JSON.stringify(m.current);
   state.history = m.history;
   state.deleted = m.deleted;
   state.videos = m.videos;
+  state.current = m.current;
   store.set(K.history, m.history);
   store.set(K.deleted, m.deleted);
   store.set(K.videos, m.videos);
   store.set(K.last, m.lastLoad);
   store.set(K.meta, m.meta);
-  return before !== fingerprint(m);
+  store.set(K.current, m.current);
+  if (m.currentAt) store.set(K.currentAt, m.currentAt);
+  const after = fingerprint({ ...m, currentAt: '', current: null });
+  return { data: before !== after, current: currentChanged };
+}
+
+/**
+ * Re-renderiza sin robarle el foco al usuario: si está escribiendo en un input
+ * de la sesión, espera a que salga del campo.
+ */
+function safeRender() {
+  const active = document.activeElement;
+  if (active && view.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) {
+    active.addEventListener('blur', () => setTimeout(safeRender, 0), { once: true });
+    return;
+  }
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
 }
 
 async function sync() {
@@ -838,7 +880,7 @@ async function sync() {
   if (!navigator.onLine) return setGh('offline', 'Sin conexión: se sincroniza cuando vuelva.');
   gh.busy = true;
   setGh('syncing', 'Sincronizando…');
-  let changed = false;
+  let changed = { data: false, current: false };
   try {
     if (!gh.cfg.gistId) { gh.cfg.gistId = await findOrCreateGist(); store.set(K.gh, gh.cfg); }
     const gist = await ghApi(`/gists/${gh.cfg.gistId}`);
@@ -868,8 +910,9 @@ async function sync() {
     gh.busy = false;
     if (gh.again) { gh.again = false; sync(); }
   }
-  // No re-renderizamos "Hoy" con una sesión en curso para no robar el foco de un input
-  if (changed && !(state.view === 'hoy' && state.current)) render();
+  // La sesión se cerró en otro dispositivo: cortar el temporizador de esta.
+  if (changed.current && !state.current) stopTimer();
+  if (changed.current || changed.data) safeRender();
 }
 
 function scheduleSync() {
@@ -902,7 +945,13 @@ function disconnectGitHub() {
 
 window.addEventListener('online', scheduleSync);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || !gh.cfg) return;
+  if (!gh.cfg) return;
+  // Al salir de la app (cambiar de pestaña, bloquear la pantalla) subir ya lo pendiente,
+  // así la sesión está en el Gist cuando la abras en el otro dispositivo.
+  if (document.visibilityState === 'hidden') {
+    if (gh.debounce) { clearTimeout(gh.debounce); gh.debounce = null; sync(); }
+    return;
+  }
   const age = Date.now() - new Date(gh.cfg.lastSync || 0).getTime();
   if (age > 60_000) sync();
 });
@@ -963,7 +1012,7 @@ function renderAccount() {
       <ul class="small muted">
         <li>Se sincroniza al abrir la app, al volver a la pestaña, al recuperar conexión y cada vez que guardás o borrás una sesión o cambiás un video.</li>
         <li>Las sesiones se <b>unen</b> entre dispositivos (no se pisan). Lo que borrás en uno se borra en todos.</li>
-        <li>La sesión en curso queda en este dispositivo hasta que la guardás.</li>
+        <li>La sesión en curso también se sincroniza: podés empezarla en la compu y seguirla en el celular. Si la tocás en los dos a la vez, gana el último cambio.</li>
         <li>Desconectar no borra tus datos locales ni el Gist.</li>
       </ul>
     </section>`;

@@ -20,7 +20,7 @@ No hay botón OAuth: el flujo OAuth de GitHub necesita un `client_secret` y su i
 2. **Repository access:** Public repositories. **Permissions → Account → Gists:** Read and write. Nada más.
 3. Pegá el token en la pestaña **Cuenta** de cada dispositivo.
 
-La app busca un gist con el archivo `rutina-casa-data.json` y, si no existe, lo crea como secreto. Las sesiones se unen por id entre dispositivos (los borrados se propagan). Videos y bandas: gana el cambio más reciente.
+La app busca un gist con el archivo `rutina-casa-data.json` y, si no existe, lo crea como secreto. Las sesiones se unen por id entre dispositivos (los borrados se propagan). Videos, bandas y la **sesión en curso**: gana el cambio más reciente. Así podés empezar la sesión en la compu y seguirla en el celular; al guardarla o descartarla en uno, se cierra en todos.
 
 El token queda en el `localStorage` de cada dispositivo. Si perdés uno, revocá el token en GitHub.
 
